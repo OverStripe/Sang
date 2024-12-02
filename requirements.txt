@@ -1,2 +1,1 @@
 python-telegram-bot==20.5
-sqlite3  # Built-in module, no need to include if using Python >= 3.0
