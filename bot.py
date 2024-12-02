@@ -1,12 +1,12 @@
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext
 import sqlite3
 
-# Connect to your database
+# Database connection
 conn = sqlite3.connect('user_history.db', check_same_thread=False)
 cursor = conn.cursor()
 
-# Create a table for storing user interactions
+# Create table for user history if not exists
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS user_history (
     user_id INTEGER,
@@ -25,37 +25,27 @@ def log_interaction(user_id, username, interaction):
     """, (user_id, username, interaction))
     conn.commit()
 
-# Command: Start
+# Command: /start and /help
 def start(update: Update, context: CallbackContext) -> None:
+    """Handles /start and /help commands."""
     user = update.effective_user
-    log_interaction(user.id, user.username, "Started bot")
-    update.message.reply_text(f"Hello {user.first_name}! I'm here to manage your history.")
+    log_interaction(user.id, user.username, "Started bot or viewed help")
+    
+    help_text = (
+        f"Hello, {user.first_name}!\n\n"
+        "Welcome to the Telegram Bot. Here are the commands you can use:\n\n"
+        "/start or /help - Show this help message.\n"
+        "/myhistory - View your interaction history.\n"
+        "/showhistory - View all users' interaction history (admin only).\n"
+        "/clearhistory - Clear all history (admin only).\n"
+        "/deleteuserhistory <user_id> - Delete a specific user's history (admin only).\n\n"
+        "Feel free to reach out if you need help!"
+    )
+    update.message.reply_text(help_text)
 
-# Command: Show all history
-def show_history(update: Update, context: CallbackContext) -> None:
-    query = """
-    SELECT user_id, username, interaction, timestamp FROM user_history
-    ORDER BY timestamp DESC
-    """
-    cursor.execute(query)
-    rows = cursor.fetchall()
-
-    if rows:
-        history = "\n\n".join(
-            [f"User ID: {row[0]}, Username: {row[1]}\n{row[3]}: {row[2]}" for row in rows]
-        )
-        update.message.reply_text(f"History of all users:\n\n{history}")
-    else:
-        update.message.reply_text("No history found.")
-
-# Command: Clear all history
-def clear_history(update: Update, context: CallbackContext) -> None:
-    cursor.execute("DELETE FROM user_history")
-    conn.commit()
-    update.message.reply_text("All history has been cleared.")
-
-# Command: Show my history
+# Command: /myhistory
 def my_history(update: Update, context: CallbackContext) -> None:
+    """Displays the interaction history of the user."""
     user = update.effective_user
     query = """
     SELECT interaction, timestamp FROM user_history
@@ -71,8 +61,34 @@ def my_history(update: Update, context: CallbackContext) -> None:
     else:
         update.message.reply_text("You have no history.")
 
-# Command: Delete history for a specific user
+# Command: /showhistory
+def show_history(update: Update, context: CallbackContext) -> None:
+    """Displays the history of all users."""
+    query = """
+    SELECT user_id, username, interaction, timestamp FROM user_history
+    ORDER BY timestamp DESC
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+
+    if rows:
+        history = "\n\n".join(
+            [f"User ID: {row[0]}, Username: {row[1]}\n{row[3]}: {row[2]}" for row in rows]
+        )
+        update.message.reply_text(f"History of all users:\n\n{history}")
+    else:
+        update.message.reply_text("No history found.")
+
+# Command: /clearhistory
+def clear_history(update: Update, context: CallbackContext) -> None:
+    """Clears all user history."""
+    cursor.execute("DELETE FROM user_history")
+    conn.commit()
+    update.message.reply_text("All history has been cleared.")
+
+# Command: /deleteuserhistory
 def delete_user_history(update: Update, context: CallbackContext) -> None:
+    """Deletes the history of a specific user."""
     if len(context.args) != 1:
         update.message.reply_text("Usage: /deleteuserhistory <user_id>")
         return
@@ -82,24 +98,23 @@ def delete_user_history(update: Update, context: CallbackContext) -> None:
     conn.commit()
     update.message.reply_text(f"History for user ID {user_id} has been deleted.")
 
-# Main function to run the bot
+# Main function
 def main():
     TOKEN = "7860010014:AAHc9iMV9d88VA9elIktiGkF6yF-eaYvkX0"
-    updater = Updater(TOKEN)
-    
-    dispatcher = updater.dispatcher
+
+    # Initialize the bot application
+    application = ApplicationBuilder().token(TOKEN).build()
 
     # Register command handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("showhistory", show_history))
-    dispatcher.add_handler(CommandHandler("clearhistory", clear_history))
-    dispatcher.add_handler(CommandHandler("myhistory", my_history))
-    dispatcher.add_handler(CommandHandler("deleteuserhistory", delete_user_history))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", start))  # Alias for /help
+    application.add_handler(CommandHandler("myhistory", my_history))
+    application.add_handler(CommandHandler("showhistory", show_history))
+    application.add_handler(CommandHandler("clearhistory", clear_history))
+    application.add_handler(CommandHandler("deleteuserhistory", delete_user_history))
 
-    # Start the bot
-    updater.start_polling()
-    updater.idle()
+    # Run the bot
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
-  
